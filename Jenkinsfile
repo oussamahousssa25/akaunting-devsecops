@@ -75,10 +75,10 @@ pipeline {
                             
                             # Télécharger PHP depuis un mirror (version simple)
                             # Note: Cette méthode peut varier selon l'OS
-                            OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-                            ARCH=$(uname -m)
+                            OS=\$(uname -s | tr '[:upper:]' '[:lower:]')
+                            ARCH=\$(uname -m)
                             
-                            if [ "$OS" = "linux" ]; then
+                            if [ "\$OS" = "linux" ]; then
                                 echo "Système Linux détecté"
                                 
                                 # Pour Debian/Ubuntu, on peut essayer d'utiliser les packages sans apt-get
@@ -93,7 +93,7 @@ pipeline {
                                     wget -q https://github.com/php/php-src/releases/download/php-8.1.0/php-8.1.0.tar.gz -O /tmp/php.tar.gz 2>/dev/null || true
                                 fi
                             else
-                                echo "Système non supporté pour l'installation automatique: $OS"
+                                echo "Système non supporté pour l'installation automatique: \$OS"
                             fi
                             
                             # Vérifier si PHP est disponible maintenant
@@ -103,7 +103,7 @@ pipeline {
                             else
                                 echo "⚠ PHP non disponible, tentative avec le PHP du système"
                                 # Essayer de trouver PHP dans les chemins communs
-                                export PATH="/usr/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+                                export PATH="/usr/bin:/usr/local/bin:/opt/homebrew/bin:\$PATH"
                             fi
                         '''
                     } else {
@@ -240,9 +240,9 @@ pipeline {
                         --no-audit \
                         --no-plugins
                     
-                    COMPOSER_EXIT_CODE=$?
+                    COMPOSER_EXIT_CODE=\$?
                     
-                    if [ $COMPOSER_EXIT_CODE -ne 0 ]; then
+                    if [ \$COMPOSER_EXIT_CODE -ne 0 ]; then
                         echo "⚠ Premier essai échoué, tentative alternative (require)..."
                         
                         # Tentative alternative avec require minimal
@@ -258,7 +258,7 @@ pipeline {
                     # Vérification de l'installation
                     if [ -d "vendor" ]; then
                         echo "✅ Dépendances installées avec succès"
-                        echo "Nombre de packages: \$(find vendor -name \"composer.json\" | wc -l)"
+                        echo "Nombre de packages: \$(find vendor -name "composer.json" | wc -l)"
                     else
                         echo "❌ Échec de l'installation des dépendances"
                         # Continuer quand même pour voir ce qui se passe
@@ -354,13 +354,13 @@ EOF
                             --testdox-text test-reports/testdox.txt \
                             --colors=never 2>/dev/null
                         
-                        TEST_EXIT_CODE=$?
+                        TEST_EXIT_CODE=\$?
                         set -e
                         
-                        if [ $TEST_EXIT_CODE -eq 0 ]; then
+                        if [ \$TEST_EXIT_CODE -eq 0 ]; then
                             echo "✅ Tous les tests passés"
                         else
-                            echo "⚠ Certains tests ont échoué (code: $TEST_EXIT_CODE)"
+                            echo "⚠ Certains tests ont échoué (code: \$TEST_EXIT_CODE)"
                         fi
                     else
                         echo "⚠ PHPUnit non trouvé, vérification minimale..."
@@ -391,7 +391,7 @@ EOF
             }
         }
 
-        // ÉTAPE 10: Analyse de sécurité
+        // ÉTAPE 10: Analyse de sécurité (CORRIGÉE)
         stage('Analyse de Sécurité') {
             steps {
                 sh '''
@@ -402,14 +402,14 @@ EOF
                     
                     # 1. Audit Composer (si disponible)
                     echo "1. Audit des dépendances Composer..."
-                    ./composer audit --format=json > security-reports/composer-audit.json 2>/dev/null || \
-                        echo "{\"message\": \"Audit Composer non disponible\"}" > security-reports/composer-audit.json
+                    ./composer audit --format=json > security-reports/composer-audit.json 2>/dev/null || \\
+                        echo "{\\"message\\": \\"Audit Composer non disponible\\"}" > security-reports/composer-audit.json
                     
                     # 2. Vérification de configuration
                     echo "2. Analyse de la configuration..."
                     {
                         echo "=== RAPPORT DE CONFIGURATION ==="
-                        echo "Date: $(date)"
+                        echo "Date: \$(date)"
                         echo ""
                         echo "Fichiers sensibles:"
                         find . -name "*.env*" -o -name "*config*" 2>/dev/null | head -20 || true
@@ -420,14 +420,18 @@ EOF
                         echo "=== FIN DU RAPPORT ==="
                     } > security-reports/configuration-audit.txt
                     
-                    # 3. Recherche de secrets potentiels (sans patterns complexes)
+                    # 3. Recherche de secrets potentiels (CORRIGÉ - sans pipe échappé)
                     echo "3. Recherche de secrets..."
                     {
                         echo "=== RECHERCHE DE SECRETS ==="
                         echo "Recherche de patterns communs..."
                         echo ""
                         echo "Patterns trouvés dans .env:"
-                        grep -i "password\|secret\|key\|token" .env 2>/dev/null | head -10 || true
+                        # CORRECTION: Utiliser plusieurs appels grep ou grep -E sans échappement
+                        grep -i password .env 2>/dev/null | head -5 || true
+                        grep -i secret .env 2>/dev/null | head -5 || true
+                        grep -i key .env 2>/dev/null | head -5 || true
+                        grep -i token .env 2>/dev/null | head -5 || true
                     } > security-reports/secrets-scan.txt
                     
                     # 4. Rapport de synthèse
@@ -436,8 +440,8 @@ EOF
 # Rapport de Sécurité - Akaunting CI/CD
 
 ## Résumé
-- **Date**: $(date)
-- **Build**: ${BUILD_VERSION}
+- **Date**: \$(date)
+- **Build**: \${BUILD_VERSION}
 - **Statut**: Analyse de sécurité effectuée
 
 ## Fichiers générés
@@ -549,10 +553,10 @@ END_VERSION
             
             sh '''
                 echo "=== DIAGNOSTIC D'ÉCHEC ==="
-                echo "User: $(whoami)"
-                echo "PWD: $(pwd)"
-                echo "PHP: $(which php 2>/dev/null || echo 'non trouvé')"
-                echo "Composer: $(which composer 2>/dev/null || echo 'non trouvé')"
+                echo "User: \$(whoami)"
+                echo "PWD: \$(pwd)"
+                echo "PHP: \$(which php 2>/dev/null || echo 'non trouvé')"
+                echo "Composer: \$(which composer 2>/dev/null || echo 'non trouvé')"
                 echo "Structure du projet:"
                 ls -la
                 echo ""
