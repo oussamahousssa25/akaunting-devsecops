@@ -91,9 +91,9 @@ pipeline {
                 echo "========== 📂 RÉCUPÉRATION DU CODE SOURCE =========="
                 checkout([
                     $class: 'GitSCM',
-                    branches: [[name: '*/master']],
+                    branches: [[name: '*/main']],
                     userRemoteConfigs: [[
-                        url: 'https://github.com/oussama-01-prog/akaunting_devsecops.git',
+                        url: 'https://github.com/oussamahousssa25/akaunting-devsecops.git',
                         credentialsId: ''
                     ]],
                     extensions: [[
@@ -265,30 +265,30 @@ pipeline {
                     
                     # Créer le fichier .env de test
                     cat > .env << 'EOF'
-APP_NAME="Akaunting CI/CD"
-APP_ENV=testing
-APP_KEY=base64:$(openssl rand -base64 32)
+APP_NAME="Akaunting"
+APP_ENV=production
+APP_KEY=base64:fDgBWqRZujev+cNQJMG4mX4XrIWXzsQnTe0noVM/8D0=
 APP_DEBUG=false
-APP_URL=http://localhost
+APP_URL=http://127.0.0.1:8000
 
-DB_CONNECTION=sqlite
-DB_DATABASE=database/database.sqlite
+DB_CONNECTION=mysql
+DB_DATABASE=akaunting
 DB_FOREIGN_KEYS=true
 
-CACHE_DRIVER=array
-SESSION_DRIVER=array
+CACHE_DRIVER=file
+SESSION_DRIVER=file
 QUEUE_CONNECTION=sync
 
 LOG_CHANNEL=stack
 LOG_LEVEL=debug
 
-MAIL_MAILER=log
+MAIL_MAILER=mail
 MAIL_FROM_ADDRESS=noreply@akaunting.test
-MAIL_FROM_NAME="Akaunting"
+MAIL_FROM_NAME="null"
 
 BROADCAST_DRIVER=log
 
-FIREWALL_ENABLED=false
+FIREWALL_ENABLED=true
 MODEL_CACHE_ENABLED=false
 DEBUGBAR_ENABLED=false
 
