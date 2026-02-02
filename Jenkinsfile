@@ -20,9 +20,9 @@ pipeline {
                 echo "========== 🚀 DÉMARRAGE DU PIPELINE =========="
                 echo "Build Version: ${BUILD_VERSION}"
                 sh '''
-                    echo "User: $(whoami)"
-                    echo "Répertoire: $(pwd)"
-                    echo "PATH: ${PATH}"
+                    echo "User: \$(whoami)"
+                    echo "Répertoire: \$(pwd)"
+                    echo "PATH: \${PATH}"
                     echo "--- Vérification système ---"
                     uname -a
                     lsb_release -a 2>/dev/null || echo "lsb_release non disponible"
@@ -107,7 +107,7 @@ pipeline {
                 sh '''
                     echo "Contenu du répertoire:"
                     ls -la
-                    echo "Taille du projet: $(du -sh . | cut -f1)"
+                    echo "Taille du projet: \$(du -sh . | cut -f1)"
                 '''
             }
         }
@@ -141,11 +141,11 @@ pipeline {
                     echo "========== 🎼 INSTALLATION DE COMPOSER =========="
                     
                     # Télécharger et installer Composer
-                    EXPECTED_CHECKSUM="$(php -r 'copy("https://composer.github.io/installer.sig", "php://stdout");')"
+                    EXPECTED_CHECKSUM="\$(php -r 'copy(\"https://composer.github.io/installer.sig\", \"php://stdout\");')"
                     php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
-                    ACTUAL_CHECKSUM="$(php -r "echo hash_file('sha384', 'composer-setup.php');")"
+                    ACTUAL_CHECKSUM="\$(php -r \"echo hash_file('sha384', 'composer-setup.php');\")"
                     
-                    if [ "$EXPECTED_CHECKSUM" != "$ACTUAL_CHECKSUM" ]; then
+                    if [ "\$EXPECTED_CHECKSUM" != "\$ACTUAL_CHECKSUM" ]; then
                         >&2 echo '❌ ERREUR: Checksum Composer invalide!'
                         exit 1
                     fi
@@ -191,12 +191,12 @@ pipeline {
                         # Méthode alternative sans jq
                         if [ -f "composer.json" ]; then
                             php -r '
-                                $json = json_decode(file_get_contents("composer.json"), true);
-                                if (!isset($json["config"])) $json["config"] = [];
-                                if (!isset($json["config"]["audit"])) $json["config"]["audit"] = [];
-                                $json["config"]["audit"]["block-insecure"] = false;
-                                $json["config"]["audit"]["ignore"] = ["PKSA-z3gr-8qht-p93v"];
-                                file_put_contents("composer.json", json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                                \$json = json_decode(file_get_contents("composer.json"), true);
+                                if (!isset(\$json["config"])) \$json["config"] = [];
+                                if (!isset(\$json["config"]["audit"])) \$json["config"]["audit"] = [];
+                                \$json["config"]["audit"]["block-insecure"] = false;
+                                \$json["config"]["audit"]["ignore"] = ["PKSA-z3gr-8qht-p93v"];
+                                file_put_contents("composer.json", json_encode(\$json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
                             '
                         fi
                     fi
@@ -225,9 +225,9 @@ pipeline {
                         --ignore-platform-reqs \
                         --no-audit
                     
-                    COMPOSER_EXIT_CODE=$?
+                    COMPOSER_EXIT_CODE=\$?
                     
-                    if [ $COMPOSER_EXIT_CODE -ne 0 ]; then
+                    if [ \$COMPOSER_EXIT_CODE -ne 0 ]; then
                         echo "⚠ Premier essai échoué, tentative alternative..."
                         
                         # Tentative alternative avec update
@@ -243,7 +243,7 @@ pipeline {
                     # Vérification de l'installation
                     if [ -d "vendor" ]; then
                         echo "✅ Dépendances installées avec succès"
-                        echo "Nombre de packages: $(find vendor -name "composer.json" | wc -l)"
+                        echo "Nombre de packages: \$(find vendor -name "composer.json" | wc -l)"
                     else
                         echo "❌ Échec de l'installation des dépendances"
                         exit 1
@@ -340,9 +340,9 @@ EOF
                             --colors=never \
                             --verbose
                         
-                        TEST_EXIT_CODE=$?
+                        TEST_EXIT_CODE=\$?
                         
-                        if [ $TEST_EXIT_CODE -eq 0 ]; then
+                        if [ \$TEST_EXIT_CODE -eq 0 ]; then
                             echo "✅ Tous les tests passés"
                         else
                             echo "❌ Certains tests ont échoué"
@@ -384,7 +384,7 @@ EOF
                     echo "2. Analyse de la configuration..."
                     {
                         echo "=== RAPPORT DE CONFIGURATION ==="
-                        echo "Date: $(date)"
+                        echo "Date: \$(date)"
                         echo ""
                         echo "Fichiers sensibles:"
                         find . -name "*.env*" -o -name "*config*" | head -20
@@ -402,7 +402,8 @@ EOF
                         echo "Recherche de patterns communs..."
                         echo ""
                         echo "Patterns trouvés:"
-                        grep -r -i "password\|secret\|key\|token" . --include="*.env" --include="*.php" 2>/dev/null | head -50 || true
+                        # Échapper le backslash avec double backslash
+                        grep -r -i "password\\|secret\\|key\\|token" . --include="*.env" --include="*.php" 2>/dev/null | head -50 || true
                     } > security-reports/secrets-scan.txt
                     
                     # 4. Vérification des dépendances vulnérables
@@ -418,15 +419,15 @@ EOF
 # Rapport de Sécurité - Akaunting CI/CD
 
 ## Résumé
-- **Date**: $(date)
-- **Build**: ${BUILD_VERSION}
-- **Statut**: $(if [ -f "security-reports/composer-audit.json" ]; then echo "Audit Composer effectué"; else echo "Audit Composer non disponible"; fi)
+- **Date**: \$(date)
+- **Build**: \${BUILD_VERSION}
+- **Statut**: \$(if [ -f "security-reports/composer-audit.json" ]; then echo "Audit Composer effectué"; else echo "Audit Composer non disponible"; fi)
 
 ## Fichiers générés
-1. `composer-audit.json` - Audit des dépendances PHP
-2. `configuration-audit.txt` - Analyse de configuration
-3. `secrets-scan.txt` - Recherche de secrets
-4. `npm-audit.json` - Audit NPM (si applicable)
+1. \`composer-audit.json\` - Audit des dépendances PHP
+2. \`configuration-audit.txt\` - Analyse de configuration
+3. \`secrets-scan.txt\` - Recherche de secrets
+4. \`npm-audit.json\` - Audit NPM (si applicable)
 
 ## Actions recommandées
 1. Examiner les vulnérabilités identifiées
@@ -457,10 +458,10 @@ EOF
 Akaunting Application Build
 ===========================
 Version: ${BUILD_VERSION}
-Date: $(date)
+Date: \$(date)
 Build: ${BUILD_NUMBER}
-Commit: $(git rev-parse --short HEAD 2>/dev/null || echo 'N/A')
-PHP Version: $(php --version | head -1)
+Commit: \$(git rev-parse --short HEAD 2>/dev/null || echo 'N/A')
+PHP Version: \$(php --version | head -1)
 Environment: Testing
 EOF
                         
@@ -515,7 +516,7 @@ EOF
                     # Supprimer les fichiers temporaires
                     rm -f composer.json.backup composer.temp.json
                     
-                    echo "Espace utilisé: $(du -sh . | cut -f1)"
+                    echo "Espace utilisé: \$(du -sh . | cut -f1)"
                     echo "✅ Nettoyage terminé"
                 '''
             }
@@ -566,7 +567,7 @@ EOF
             sh '''
                 echo "=== DIAGNOSTIC D'ÉCHEC ==="
                 echo "Dernières erreurs:"
-                tail -50 ${WORKSPACE}/log || tail -50 /var/log/jenkins/jenkins.log 2>/dev/null || echo "Logs non disponibles"
+                tail -50 \${WORKSPACE}/log || tail -50 /var/log/jenkins/jenkins.log 2>/dev/null || echo "Logs non disponibles"
                 echo ""
                 echo "État des fichiers:"
                 ls -la
