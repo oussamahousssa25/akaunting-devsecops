@@ -391,80 +391,40 @@ EOF
             }
         }
 
-        // ÉTAPE 10: Analyse de sécurité (CORRIGÉE)
-        stage('Analyse de Sécurité') {
-            steps {
-                sh '''
-                    echo "========== 🔒 ANALYSE DE SÉCURITÉ =========="
-                    
-                    # Créer le répertoire pour les rapports
-                    mkdir -p security-reports
-                    
-                    # 1. Audit Composer (si disponible)
-                    echo "1. Audit des dépendances Composer..."
-                    ./composer audit --format=json > security-reports/composer-audit.json 2>/dev/null || \\
-                        echo "{\\"message\\": \\"Audit Composer non disponible\\"}" > security-reports/composer-audit.json
-                    
-                    # 2. Vérification de configuration
-                    echo "2. Analyse de la configuration..."
-                    {
-                        echo "=== RAPPORT DE CONFIGURATION ==="
-                        echo "Date: \$(date)"
-                        echo ""
-                        echo "Fichiers sensibles:"
-                        find . -name "*.env*" -o -name "*config*" 2>/dev/null | head -20 || true
-                        echo ""
-                        echo "Permissions des répertoires:"
-                        ls -ld storage bootstrap/cache 2>/dev/null || true
-                        echo ""
-                        echo "=== FIN DU RAPPORT ==="
-                    } > security-reports/configuration-audit.txt
-                    
-                    # 3. Recherche de secrets potentiels (CORRIGÉ - sans pipe échappé)
-                    echo "3. Recherche de secrets..."
-                    {
-                        echo "=== RECHERCHE DE SECRETS ==="
-                        echo "Recherche de patterns communs..."
-                        echo ""
-                        echo "Patterns trouvés dans .env:"
-                        # CORRECTION: Utiliser plusieurs appels grep ou grep -E sans échappement
-                        grep -i password .env 2>/dev/null | head -5 || true
-                        grep -i secret .env 2>/dev/null | head -5 || true
-                        grep -i key .env 2>/dev/null | head -5 || true
-                        grep -i token .env 2>/dev/null | head -5 || true
-                    } > security-reports/secrets-scan.txt
-                    
-                    # 4. Rapport de synthèse
-                    echo "4. Génération du rapport de synthèse..."
-                    cat > security-reports/security-summary.md << 'END_REPORT'
-# Rapport de Sécurité - Akaunting CI/CD
-
-## Résumé
-- **Date**: \$(date)
-- **Build**: \${BUILD_VERSION}
-- **Statut**: Analyse de sécurité effectuée
-
-## Fichiers générés
-1. composer-audit.json - Audit des dépendances PHP
-2. configuration-audit.txt - Analyse de configuration
-3. secrets-scan.txt - Recherche de secrets
-
-## Actions recommandées
-1. Examiner les vulnérabilités identifiées
-2. Vérifier les permissions des fichiers
-3. S'assurer qu'aucun secret n'est exposé
-
-END_REPORT
-                    
-                    echo "✅ Analyse de sécurité terminée"
-                '''
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'security-reports/**', allowEmptyArchive: true
-                }
-            }
+        // ÉTAPE 10: Analyse de sécurité (TRIVY)
+       stage('Security Scan with Trivy') {
+    steps {
+        script {
+            echo "========== 🔍 TRIVY SECURITY SCAN =========="
+            
+            // Ensure a directory for reports exists
+            sh 'mkdir -p trivy-reports'
+            
+            // Use the official Trivy Docker image to scan the current directory for vulnerable dependencies.
+            // The `--exit-code 0` ensures the pipeline continues even if vulnerabilities are found.
+            // The `--format json` outputs a structured report.
+            // Results are saved to a file for archiving.
+            sh '''
+                docker run --rm \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    -v "$(pwd):/src" \
+                    aquasec/trivy:latest fs \
+                    --exit-code 0 \
+                    --no-progress \
+                    --format json \
+                    /src > trivy-reports/dependency-scan.json || true
+            '''
+            
+            echo "✅ Trivy scan complete. Report saved."
         }
+    }
+    post {
+        always {
+            // Always archive the JSON report so you can review it later
+            archiveArtifacts artifacts: 'trivy-reports/dependency-scan.json', allowEmptyArchive: true
+        }
+    }
+}
 
         // ÉTAPE 11: Build et packaging
         stage('Build Application') {
