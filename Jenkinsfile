@@ -243,7 +243,7 @@ pipeline {
                     # Vérification de l'installation
                     if [ -d "vendor" ]; then
                         echo "✅ Dépendances installées avec succès"
-                        echo "Nombre de packages: \$(find vendor -name "composer.json" | wc -l)"
+                        echo "Nombre de packages: \$(find vendor -name \"composer.json\" | wc -l)"
                     else
                         echo "❌ Échec de l'installation des dépendances"
                         exit 1
@@ -366,7 +366,7 @@ EOF
             }
         }
 
-        // ÉTAPE 10: Analyse de sécurité
+        // ÉTAPE 10: Analyse de sécurité (CORRIGÉE)
         stage('Analyse de Sécurité') {
             steps {
                 sh '''
@@ -402,8 +402,8 @@ EOF
                         echo "Recherche de patterns communs..."
                         echo ""
                         echo "Patterns trouvés:"
-                        # Échapper le backslash avec double backslash
-                        grep -r -i "password\\|secret\\|key\\|token" . --include="*.env" --include="*.php" 2>/dev/null | head -50 || true
+                        # Correction: utiliser grep avec -E et pattern simple
+                        grep -r -E -i "password|secret|key|token" . --include="*.env" --include="*.php" 2>/dev/null | head -50 || true
                     } > security-reports/secrets-scan.txt
                     
                     # 4. Vérification des dépendances vulnérables
@@ -413,28 +413,28 @@ EOF
                             echo "⚠ NPM audit non disponible" > security-reports/npm-audit.txt
                     fi
                     
-                    # 5. Rapport de synthèse
+                    # 5. Rapport de synthèse (CORRIGÉ sans backticks problématiques)
                     echo "5. Génération du rapport de synthèse..."
-                    cat > security-reports/security-summary.md << 'EOF'
+                    cat > security-reports/security-summary.md << 'END_REPORT'
 # Rapport de Sécurité - Akaunting CI/CD
 
 ## Résumé
-- **Date**: \$(date)
-- **Build**: \${BUILD_VERSION}
-- **Statut**: \$(if [ -f "security-reports/composer-audit.json" ]; then echo "Audit Composer effectué"; else echo "Audit Composer non disponible"; fi)
+- **Date**: $(date)
+- **Build**: ${BUILD_VERSION}
+- **Statut**: $(if [ -f "security-reports/composer-audit.json" ]; then echo "Audit Composer effectué"; else echo "Audit Composer non disponible"; fi)
 
 ## Fichiers générés
-1. \`composer-audit.json\` - Audit des dépendances PHP
-2. \`configuration-audit.txt\` - Analyse de configuration
-3. \`secrets-scan.txt\` - Recherche de secrets
-4. \`npm-audit.json\` - Audit NPM (si applicable)
+1. composer-audit.json - Audit des dépendances PHP
+2. configuration-audit.txt - Analyse de configuration
+3. secrets-scan.txt - Recherche de secrets
+4. npm-audit.json - Audit NPM (si applicable)
 
 ## Actions recommandées
 1. Examiner les vulnérabilités identifiées
 2. Vérifier les permissions des fichiers
 3. S'assurer qu'aucun secret n'est exposé
 
-EOF
+END_REPORT
                     
                     echo "✅ Analyse de sécurité terminée"
                 '''
@@ -454,7 +454,7 @@ EOF
                     
                     sh """
                         # Créer le fichier de version
-                        cat > version.txt << EOF
+                        cat > version.txt << END_VERSION
 Akaunting Application Build
 ===========================
 Version: ${BUILD_VERSION}
@@ -463,7 +463,7 @@ Build: ${BUILD_NUMBER}
 Commit: \$(git rev-parse --short HEAD 2>/dev/null || echo 'N/A')
 PHP Version: \$(php --version | head -1)
 Environment: Testing
-EOF
+END_VERSION
                         
                         # Créer la liste des fichiers exclus
                         EXCLUDES=""
