@@ -33,9 +33,9 @@ pipeline {
             steps {
                 checkout([
                     $class: 'GitSCM',
-                    branches: [[name: '*/master']],
+                    branches: [[name: '*/main']],
                     userRemoteConfigs: [[
-                        url: 'https://github.com/oussama-01-prog/akaunting_devsecops.git'
+                        url: 'https://github.com/oussamahousssa25/akaunting-devsecops.git'
                     ]],
                     extensions: [[
                         $class: 'CloneOption',
