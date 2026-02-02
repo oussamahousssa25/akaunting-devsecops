@@ -425,7 +425,46 @@ EOF
                 }
             }
         }
-
+stage('Installer Docker') {
+    steps {
+        script {
+            echo "========== 🐳 INSTALLATION DE DOCKER =========="
+            
+            // Vérifier si Docker est déjà installé
+            def dockerInstalled = sh(script: 'which docker 2>/dev/null', returnStatus: true) == 0
+            
+            if (!dockerInstalled) {
+                echo "Installation de Docker..."
+                
+                sh '''
+                    # Installation de Docker (méthode officielle)
+                    curl -fsSL https://get.docker.com -o get-docker.sh
+                    sh get-docker.sh
+                    
+                    # Démarrer le service Docker
+                    service docker start 2>/dev/null || systemctl start docker 2>/dev/null || true
+                    
+                    # Vérifier l'installation
+                    docker --version
+                    echo "✅ Docker installé avec succès"
+                '''
+            } else {
+                echo "✅ Docker déjà installé"
+                sh 'docker --version'
+            }
+            
+            // Vérifier les permissions Docker
+            sh '''
+                echo "Vérification des permissions Docker..."
+                docker ps 2>/dev/null && echo "✅ Docker accessible" || {
+                    echo "⚠ Docker nécessite des permissions"
+                    echo "Ajout de l'utilisateur au groupe docker..."
+                    sudo usermod -aG docker $USER 2>/dev/null || echo "Impossible d'ajouter au groupe docker"
+                }
+            '''
+        }
+    }
+}
         // ÉTAPE 11: Build et packaging
         stage('Build Docker Image & Push') {
             environment {
