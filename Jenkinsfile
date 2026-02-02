@@ -427,112 +427,58 @@ EOF
 }
 
         // ÉTAPE 11: Build et packaging
-        stage('Build Application') {
-            steps {
-                script {
-                    echo "========== 🏗️ BUILD DE L'APPLICATION =========="
-                    
-                    sh """
-                        # Créer le fichier de version
-                        cat > version.txt << END_VERSION
-Akaunting Application Build
-===========================
-Version: ${BUILD_VERSION}
-Date: \$(date)
-Build: ${BUILD_NUMBER}
-Commit: \$(git rev-parse --short HEAD 2>/dev/null || echo 'N/A')
-PHP Version: \$(php --version 2>/dev/null | head -1 || echo 'PHP non disponible')
-Environment: CI/CD Pipeline
-
-END_VERSION
-                        
-                        # Créer la liste des fichiers exclus
-                        EXCLUDES=""
-                        EXCLUDES="\${EXCLUDES} --exclude=.git"
-                        EXCLUDES="\${EXCLUDES} --exclude=.env"
-                        EXCLUDES="\${EXCLUDES} --exclude=.env.example"
-                        EXCLUDES="\${EXCLUDES} --exclude=node_modules"
-                        EXCLUDES="\${EXCLUDES} --exclude=*.log"
-                        EXCLUDES="\${EXCLUDES} --exclude=test-reports"
-                        EXCLUDES="\${EXCLUDES} --exclude=security-reports"
-                        EXCLUDES="\${EXCLUDES} --exclude=*.tar.gz"
-                        EXCLUDES="\${EXCLUDES} --exclude=*.zip"
-                        EXCLUDES="\${EXCLUDES} --exclude=storage/logs/*"
-                        EXCLUDES="\${EXCLUDES} --exclude=storage/framework/cache/*"
-                        EXCLUDES="\${EXCLUDES} --exclude=storage/framework/sessions/*"
-                        EXCLUDES="\${EXCLUDES} --exclude=storage/framework/views/*"
-                        EXCLUDES="\${EXCLUDES} --exclude=composer"
-                        EXCLUDES="\${EXCLUDES} --exclude=composer-setup.php"
-                        
-                        # Créer l'archive
-                        echo "Création de l'archive akaunting-\${BUILD_VERSION}.tar.gz..."
-                        tar -czf akaunting-${BUILD_VERSION}.tar.gz \${EXCLUDES} . 2>/dev/null || {
-                            echo "⚠ Erreur lors de la création de l'archive, tentative alternative..."
-                            # Tentative alternative avec moins d'exclusions
-                            tar -czf akaunting-${BUILD_VERSION}.tar.gz --exclude=.git --exclude=*.tar.gz --exclude=*.zip . 2>/dev/null || true
-                        }
-                        
-                        if [ -f "akaunting-${BUILD_VERSION}.tar.gz" ]; then
-                            echo "✅ Build créé avec succès"
-                            echo "Taille: \$(du -h akaunting-${BUILD_VERSION}.tar.gz 2>/dev/null | cut -f1 || echo 'N/A')"
-                        else
-                            echo "⚠ Impossible de créer l'archive, création d'un zip alternatif..."
-                            zip -r akaunting-${BUILD_VERSION}.zip . -x "*.git*" "*.tar.gz" "*.zip" 2>/dev/null || true
-                        fi
-                    """
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'akaunting-*.tar.gz,akaunting-*.zip,version.txt', allowEmptyArchive: true
-                }
-            }
-        }
+stage('Build Docker Image & Push') {
+    environment {
+        // variables 
+        DOCKER_REPO = 'oussama25351/akaunting'  
+        IMAGE_TAG = "${BUILD_VERSION}"
     }
-
-    // SECTION POST-BUILD
-    post {
-        success {
-            echo """
-            ========== ✅ PIPELINE RÉUSSI ==========
-            Build: ${BUILD_VERSION}
-            Numéro: ${BUILD_NUMBER}
-            Durée: ${currentBuild.durationString}
-            =========================================
-            """
-        }
-        
-        failure {
-            echo """
-            ========== ❌ PIPELINE EN ÉCHEC ==========
-            Build: ${BUILD_VERSION}
-            Numéro: ${BUILD_NUMBER}
-            Cause: Voir les logs
-            ==========================================
+    
+    steps {
+        script {
+            echo "========== 🐳 BUILD (Docker build & push) =========="
+            
+            // Vérification Docker 
+            sh '''
+                docker --version || echo "⚠ Docker n'est pas installé"
+            '''
+            
+            // 1. Docker Login avec vos credentials
+            withCredentials([usernamePassword(
+                credentialsId: 'dockerhub-creds',  
+                usernameVariable: 'DOCKER_USERNAME',
+                passwordVariable: 'DOCKER_PASSWORD'
+            )]) {
+                sh '''
+                    echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+                    echo "✅ Connecté à Docker Hub"
+                '''
+            }
+            
+            // 2. Docker Build
+            sh """
+                echo "Construction de l'image Docker..."
+                docker build \\
+                    -t ${DOCKER_REPO}:${IMAGE_TAG} \\
+                    -t ${DOCKER_REPO}:latest \\
+                    -f Dockerfile .
             """
             
-            sh '''
-                echo "=== DIAGNOSTIC D'ÉCHEC ==="
-                echo "User: \$(whoami)"
-                echo "PWD: \$(pwd)"
-                echo "PHP: \$(which php 2>/dev/null || echo 'non trouvé')"
-                echo "Composer: \$(which composer 2>/dev/null || echo 'non trouvé')"
-                echo "Structure du projet:"
-                ls -la
-                echo ""
-                echo "Contenu de vendor:"
-                ls -la vendor/ 2>/dev/null | head -5 || echo "vendor/ non disponible"
-            '''
-        }
-        
-        always {
-            echo """
-            ========== 📊 STATISTIQUES ==========
-            Pipeline: ${currentBuild.fullDisplayName}
-            Durée totale: ${currentBuild.durationString}
-            Résultat: ${currentBuild.currentResult}
-            =====================================
+            // 3. Docker Push
+            sh """
+                echo "Envoi vers Docker Hub..."
+                docker push ${DOCKER_REPO}:${IMAGE_TAG}
+                docker push ${DOCKER_REPO}:latest
             """
+        }
+    }
+    
+    post {
+        success {
+            echo "✅ Docker build & push réussi!"
+        }
+        failure {
+            echo "❌ Échec du Docker build & push"
         }
     }
 }
