@@ -391,94 +391,129 @@ EOF
             }
         }
 
-        // ÉTAPE 10: Analyse de sécurité (TRIVY)
-       stage('Security Scan with Trivy') {
-    steps {
-        script {
-            echo "========== 🔍 TRIVY SECURITY SCAN =========="
-            
-            // Ensure a directory for reports exists
-            sh 'mkdir -p trivy-reports'
-            
-            // Use the official Trivy Docker image to scan the current directory for vulnerable dependencies.
-            // The `--exit-code 0` ensures the pipeline continues even if vulnerabilities are found.
-            // The `--format json` outputs a structured report.
-            // Results are saved to a file for archiving.
-            sh '''
-                docker run --rm \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    -v "$(pwd):/src" \
-                    aquasec/trivy:latest fs \
-                    --exit-code 0 \
-                    --no-progress \
-                    --format json \
-                    /src > trivy-reports/dependency-scan.json || true
-            '''
-            
-            echo "✅ Trivy scan complete. Report saved."
+         // ÉTAPE 10: Analyse de sécurité (TRIVY)
+        stage('Security Scan with Trivy') {
+            steps {
+                script {
+                    echo "========== 🔍 TRIVY SECURITY SCAN =========="
+                    
+                    // Ensure a directory for reports exists
+                    sh 'mkdir -p trivy-reports'
+                    
+                    // Use the official Trivy Docker image to scan the current directory for vulnerable dependencies.
+                    // The `--exit-code 0` ensures the pipeline continues even if vulnerabilities are found.
+                    // The `--format json` outputs a structured report.
+                    // Results are saved to a file for archiving.
+                    sh '''
+                        docker run --rm \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v "$(pwd):/src" \
+                            aquasec/trivy:latest fs \
+                            --exit-code 0 \
+                            --no-progress \
+                            --format json \
+                            /src > trivy-reports/dependency-scan.json || true
+                    '''
+                    
+                    echo "✅ Trivy scan complete. Report saved."
+                }
+            }
+            post {
+                always {
+                    // Always archive the JSON report so you can review it later
+                    archiveArtifacts artifacts: 'trivy-reports/dependency-scan.json', allowEmptyArchive: true
+                }
+            }
         }
-    }
-    post {
-        always {
-            // Always archive the JSON report so you can review it later
-            archiveArtifacts artifacts: 'trivy-reports/dependency-scan.json', allowEmptyArchive: true
-        }
-    }
-}
 
         // ÉTAPE 11: Build et packaging
-stage('Build Docker Image & Push') {
-    environment {
-        // variables 
-        DOCKER_REPO = 'oussama25351/akaunting'  
-        IMAGE_TAG = "${BUILD_VERSION}"
-    }
-    
-    steps {
-        script {
-            echo "========== 🐳 BUILD (Docker build & push) =========="
-            
-            // Vérification Docker 
-            sh '''
-                docker --version || echo "⚠ Docker n'est pas installé"
-            '''
-            
-            // 1. Docker Login avec vos credentials
-            withCredentials([usernamePassword(
-                credentialsId: 'dockerhub-creds',  
-                usernameVariable: 'DOCKER_USERNAME',
-                passwordVariable: 'DOCKER_PASSWORD'
-            )]) {
-                sh '''
-                    echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
-                    echo "✅ Connecté à Docker Hub"
-                '''
+        stage('Build Docker Image & Push') {
+            environment {
+                // variables 
+                DOCKER_REPO = 'oussama25351/akaunting'  
+                IMAGE_TAG = "${BUILD_VERSION}"
             }
             
-            // 2. Docker Build
-            sh """
-                echo "Construction de l'image Docker..."
-                docker build \\
-                    -t ${DOCKER_REPO}:${IMAGE_TAG} \\
-                    -t ${DOCKER_REPO}:latest \\
-                    -f Dockerfile .
-            """
+            steps {
+                script {
+                    echo "========== 🐳 BUILD (Docker build & push) =========="
+                    
+                    // Vérification Docker 
+                    sh '''
+                        docker --version || echo "⚠ Docker n'est pas installé"
+                    '''
+                    
+                    // 1. Docker Login avec vos credentials
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub-creds',  
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )]) {
+                        sh '''
+                            echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+                            echo "✅ Connecté à Docker Hub"
+                        '''
+                    }
+                    
+                    // 2. Docker Build
+                    sh """
+                        echo "Construction de l'image Docker..."
+                        docker build \\
+                            -t ${DOCKER_REPO}:${IMAGE_TAG} \\
+                            -t ${DOCKER_REPO}:latest \\
+                            -f Dockerfile .
+                    """
+                    
+                    // 3. Docker Push
+                    sh """
+                        echo "Envoi vers Docker Hub..."
+                        docker push ${DOCKER_REPO}:${IMAGE_TAG}
+                        docker push ${DOCKER_REPO}:latest
+                    """
+                }
+            }
             
-            // 3. Docker Push
-            sh """
-                echo "Envoi vers Docker Hub..."
-                docker push ${DOCKER_REPO}:${IMAGE_TAG}
-                docker push ${DOCKER_REPO}:latest
-            """
+            post {
+                success {
+                    echo " Docker build & push réussi!"
+                }
+                failure {
+                    echo " Échec du Docker build & push"
+                }
+            }
         }
-    }
-    
+    }  
+
+    // SECTION POST-BUILD du pipeline
     post {
         success {
-            echo "✅ Docker build & push réussi!"
+            echo """
+            ========== ✅ PIPELINE RÉUSSI ==========
+            Build: ${BUILD_VERSION}
+            Numéro: ${BUILD_NUMBER}
+            Durée: ${currentBuild.durationString}
+            =========================================
+            """
         }
+        
         failure {
-            echo "❌ Échec du Docker build & push"
+            echo """
+            ========== ❌ PIPELINE EN ÉCHEC ==========
+            Build: ${BUILD_VERSION}
+            Numéro: ${BUILD_NUMBER}
+            Cause: Voir les logs
+            ==========================================
+            """
+        }
+        
+        always {
+            echo """
+            ========== 📊 STATISTIQUES ==========
+            Pipeline: ${currentBuild.fullDisplayName}
+            Durée totale: ${currentBuild.durationString}
+            Résultat: ${currentBuild.currentResult}
+            =====================================
+            """
         }
     }
-}
+}  
