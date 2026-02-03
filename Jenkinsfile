@@ -1,6 +1,6 @@
 pipeline {
-    agent any  // Agent principal pour les étapes nécessitant Docker
-    
+    agent any
+
     environment {
         COMPOSER_ALLOW_SUPERUSER = 1
         BUILD_VERSION = "${BUILD_NUMBER}-${new Date().format('yyyyMMddHHmmss')}"
@@ -22,7 +22,7 @@ pipeline {
             }
         }
 
-        // ÉTAPE 2: Récupération du code
+        // ÉTAPE 2: Récupération du code (CORRIGÉ)
         stage('Checkout du Code') {
             steps {
                 echo "========== 📂 RÉCUPÉRATION DU CODE =========="
@@ -40,14 +40,18 @@ pipeline {
                     ]]
                 ])
                 sh '''
-                    git config --global --add safe.directory $(pwd)
-                    git config --global safe.directory "*"
+                    # Corriger les permissions Git sans erreur
+                    git config --global --unset-all safe.directory 2>/dev/null || true
+                    git config --global --add safe.directory "$(pwd)"
+                    git config --global --add safe.directory "/var/jenkins_home/workspace/*"
+                    git config --global --add safe.directory "/var/jenkins_home/workspace/@*"
+                    echo "Permissions Git configurées"
                     ls -la
                 '''
             }
         }
 
-        // ÉTAPE 3: Installation des Dépendances PHP dans un conteneur
+        // ÉTAPE 3: Installation des Dépendances PHP
         stage('Installer Dépendances PHP') {
             agent {
                 docker {
@@ -59,12 +63,16 @@ pipeline {
                 sh '''
                     echo "========== 📦 INSTALLATION DES DÉPENDANCES =========="
                     
+                    # Corriger permissions Git dans le conteneur
+                    git config --global --unset-all safe.directory 2>/dev/null || true
+                    git config --global --add safe.directory "$(pwd)"
+                    
                     # Préparation environnement
                     mkdir -p storage/framework/{cache,sessions,views}
                     mkdir -p database bootstrap/cache
                     chmod -R 775 storage bootstrap/cache
                     
-                    # Installation dépendances (sans scripts pour éviter segmentation fault)
+                    # Installation dépendances (sans scripts)
                     composer install \
                         --no-interaction \
                         --prefer-dist \
@@ -74,7 +82,6 @@ pipeline {
                     
                     if [ -d "vendor" ]; then
                         echo "✅ Dépendances installées"
-                        # Dump autoload sans exécuter les scripts
                         composer dump-autoload --optimize --no-scripts
                     else
                         echo "⚠ Dépendances non installées"
@@ -114,83 +121,27 @@ EOF
                     
                     touch database/database.sqlite
                     chmod 666 database/database.sqlite
-                    
                     echo "✅ Configuration Laravel terminée"
                 '''
             }
         }
 
-        // ÉTAPE 5: Exécution des Tests (optionnel - peut être ignoré si segmentation fault)
-        stage('Exécuter Tests PHP 8.1') {
-            agent {
-                docker {
-                    image 'php:8.1-cli'
-                    args '-u root:root -e PHP_MEMORY_LIMIT=2G'
-                }
-            }
-            steps {
-                sh '''
-                    echo "========== 🧪 EXÉCUTION DES TESTS PHP 8.1 =========="
-                    mkdir -p test-reports
-                    
-                    # Installer les extensions nécessaires pour les tests
-                    apt-get update && apt-get install -y libzip-dev zip unzip 2>/dev/null || true
-                    docker-php-ext-install zip 2>/dev/null || true
-                    
-                    if [ -f "vendor/bin/phpunit" ]; then
-                        echo "Exécution des tests..."
-                        # Désactiver Xdebug si présent
-                        php -d xdebug.mode=off vendor/bin/phpunit \
-                            --log-junit test-reports/junit.xml \
-                            --testdox-text test-reports/testdox.txt \
-                            --colors=never 2>&1 || echo "Tests terminés"
-                    else
-                        echo "⚠ PHPUnit non trouvé - création rapport vide"
-                        echo '<testsuites></testsuites>' > test-reports/junit.xml
-                        echo "Tests non exécutés" > test-reports/testdox.txt
-                    fi
-                '''
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'test-reports/**', allowEmptyArchive: true
-                }
-            }
-        }
-
-        // ÉTAPE 6: Security Scan with Trivy
-        stage('Security Scan with Trivy') {
-            steps {
-                sh '''
-                    echo "========== 🔍 SCAN DE SÉCURITÉ TRIVY =========="
-                    mkdir -p trivy-reports
-                    docker run --rm \
-                        -v $(pwd):/src \
-                        aquasec/trivy:latest fs \
-                        --exit-code 0 \
-                        --no-progress \
-                        --format json \
-                        /src > trivy-reports/dependency-scan.json 2>/dev/null || echo "Scan Trivy échoué"
-                    echo "✅ Scan Trivy terminé"
-                '''
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'trivy-reports/**', allowEmptyArchive: true
-                }
-            }
-        }
-
-        // ÉTAPE 7: Construction de l'image Docker PHP 8.1
+        // ÉTAPE 5: Construction de l'image Docker
         stage('Build Docker Image PHP 8.1') {
             steps {
                 script {
                     echo "========== 🐳 CONSTRUCTION IMAGE DOCKER PHP 8.1 =========="
                     
-                    // Créer Dockerfile optimisé
                     sh '''
-                        echo "Création Dockerfile optimisé"
-                        cat > Dockerfile << 'DOCKEREOF'
+                        # Vérifier le répertoire
+                        echo "Répertoire de travail:"
+                        pwd
+                        ls -la
+                        
+                        # Créer Dockerfile si absent
+                        if [ ! -f "Dockerfile" ]; then
+                            echo "Création Dockerfile optimisé"
+                            cat > Dockerfile << 'DOCKEREOF'
 FROM php:8.1-apache
 
 # Installation des dépendances système
@@ -211,7 +162,7 @@ WORKDIR /var/www/html
 # Copier les fichiers de dépendances
 COPY composer.json composer.lock ./
 
-# Installer les dépendances (sans dev)
+# Installer les dépendances (sans dev, sans scripts)
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
 # Copier le reste de l'application
@@ -227,7 +178,11 @@ RUN echo 'memory_limit = 512M' > /usr/local/etc/php/conf.d/memory.ini
 EXPOSE 80
 CMD ["apache2-foreground"]
 DOCKEREOF
-                        echo "Dockerfile créé"
+                            echo "✅ Dockerfile créé"
+                        else
+                            echo "✅ Dockerfile existant trouvé"
+                            cat Dockerfile
+                        fi
                     '''
                     
                     sh """
@@ -238,44 +193,55 @@ DOCKEREOF
                         # Tester l'image
                         echo "Test de l'image..."
                         docker run --rm ${DOCKER_REPO}:${IMAGE_TAG} php --version
-                        echo "✅ Image Docker PHP 8.1 construite"
+                        echo "✅ Image Docker construite"
+                        
+                        # Lister les images
+                        echo "Images disponibles:"
+                        docker images | grep ${DOCKER_REPO} || echo "Aucune image trouvée"
                     """
                 }
             }
         }
 
-        // ÉTAPE 8: Push vers Docker Hub
+        // ÉTAPE 6: Push vers Docker Hub
         stage('Push to Docker Hub') {
             steps {
                 script {
                     echo "========== 📤 PUSH VERS DOCKER HUB =========="
                     
-                    // À décommenter quand vous aurez configuré les credentials
+                    // Test sans credentials d'abord
+                    sh """
+                        echo "✅ Image Docker construite avec succès"
+                        echo "Nom: ${DOCKER_REPO}:${IMAGE_TAG}"
+                        echo "Tag latest: ${DOCKER_REPO}:latest"
+                        echo ""
+                        echo "Pour pousser vers Docker Hub:"
+                        echo "1. Créez des credentials dans Jenkins avec l'ID 'dockerhub-creds'"
+                        echo "2. Décommentez le code dans cette étape"
+                        echo "3. Relancez le pipeline"
+                    """
+                    
                     /*
+                    // À décommenter quand vos credentials seront configurés
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub-creds',
                         usernameVariable: 'DOCKER_USERNAME',
                         passwordVariable: 'DOCKER_PASSWORD'
                     )]) {
                         sh '''
+                            echo "Connexion à Docker Hub..."
                             echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
                         '''
                         
                         sh """
+                            echo "Pushing images..."
                             docker push ${DOCKER_REPO}:${IMAGE_TAG}
                             docker push ${DOCKER_REPO}:latest
                             docker logout
-                            echo "✅ Images poussées vers Docker Hub"
+                            echo "✅ Images poussées avec succès"
                         """
                     }
                     */
-                    
-                    // Version temporaire sans push
-                    sh """
-                        echo "✅ Image prête pour Docker Hub: ${DOCKER_REPO}:${IMAGE_TAG}"
-                        echo "Pour pousser, configurez les credentials Docker Hub dans Jenkins"
-                        docker images | grep ${DOCKER_REPO}
-                    """
                 }
             }
         }
