@@ -22,7 +22,7 @@ pipeline {
             }
         }
 
-        // ÉTAPE 2: Récupération du code (CORRIGÉ)
+        // ÉTAPE 2: Récupération du code source
         stage('Checkout du Code') {
             steps {
                 echo "========== RÉCUPÉRATION DU CODE =========="
@@ -126,8 +126,8 @@ EOF
             }
         }
 
-        // ÉTAPE 5: VRAIS TESTS PHPUNIT (version corrigée sans backslash)
-        stage('Exécuter Tests PHPUnit Complets') {
+        // ÉTAPE 5: TESTS PHPUNIT 
+        stage('Exécuter Tests ') {
             agent {
                 docker {
                     image 'webdevops/php-dev:8.1'
@@ -347,7 +347,7 @@ DOCKEREOF
             }
         }
 
-          // ÉTAPE 8: Push vers Docker Hub (CORRIGÉ)
+          // ÉTAPE 8: Push vers Docker Hub 
         stage('Push to Docker Hub') {
             steps {
                 script {
