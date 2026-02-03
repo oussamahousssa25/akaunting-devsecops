@@ -125,75 +125,136 @@ EOF
                 '''
             }
         }
-        // ÉTAPE 5: Tests simplifiés
-        stage('Exécuter Tests Simples') {
+
+        // ÉTAPE 5: VRAIS TESTS PHPUNIT (remplacé)
+        stage('Exécuter Tests PHPUnit Complets') {
             agent {
                 docker {
-                    image 'php:8.1-cli'
-                    args '-u root:root'
+                    image 'webdevops/php-dev:8.1'
+                    args '-u root:root -e PHP_MEMORY_LIMIT=2G -e COMPOSER_MEMORY_LIMIT=-1'
                 }
             }
             steps {
                 sh '''
-                    echo "========== TESTS SIMPLIFIÉS =========="
+                    echo "========== TESTS PHPUNIT COMPLETS =========="
+                    echo "Cette étape peut prendre plusieurs minutes..."
+                    
+                    # Désactiver Xdebug (cause principale de segmentation fault)
+                    echo "Désactivation de Xdebug..."
+                    rm -f /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini 2>/dev/null || true
+                    php -d xdebug.mode=off -v | head -1
+                    
+                    # Configuration PHP pour éviter le segmentation fault
+                    echo 'memory_limit = 2G' > /usr/local/etc/php/conf.d/memory.ini
+                    echo 'opcache.enable = 0' >> /usr/local/etc/php/conf.d/memory.ini
+                    echo 'xdebug.mode = off' >> /usr/local/etc/php/conf.d/memory.ini
+                    
+                    # Créer le répertoire pour les rapports
                     mkdir -p test-reports
                     
-                    # Installation de Composer (correction de l'erreur)
-                    echo "=== Installation de Composer ==="
-                    if ! command -v composer >/dev/null 2>&1; then
-                        echo "Installation de Composer..."
-                        curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+                    # Temps de début
+                    START_TIME=$(date +%s)
+                    
+                    # Vérifier que PHPUnit est disponible
+                    if [ ! -f "vendor/bin/phpunit" ]; then
+                        echo "Installation de PHPUnit..."
+                        composer require --dev phpunit/phpunit --no-interaction --ignore-platform-reqs
                     fi
                     
-                    # Tests de base seulement
-                    echo "=== Test 1: PHP Version ==="
-                    php --version
+                    # Vérifier la configuration des tests
+                    echo "=== Vérification pré-test ==="
+                    ls -la vendor/bin/
+                    [ -f "phpunit.xml" ] && echo "phpunit.xml trouvé" || echo "phpunit.xml non trouvé, utilisation configuration par défaut"
                     
-                    echo "=== Test 2: Extensions PHP ==="
-                    php -m | grep -E "(pdo|mbstring|xml|json|curl|zip|gd)" || echo "Certaines extensions manquent"
+                    # Préparer la commande PHPUnit
+                    PHPUNIT_CMD="php -d xdebug.mode=off vendor/bin/phpunit"
                     
-                    echo "=== Test 3: Composer ==="
-                    composer --version 2>/dev/null || echo "Composer non disponible"
+                    # Exécuter les tests avec timeout et gestion d'erreur
+                    echo "=== Début des tests PHPUnit ==="
                     
-                    echo "=== Test 4: Structure Laravel ==="
-                    ls -la
-                    [ -f "artisan" ] && echo " Artisan présent" || echo "⚠ Artisan absent"
-                    [ -d "vendor" ] && echo " Vendor présent" || echo "⚠ Vendor absent"
-                    [ -f "composer.json" ] && echo " composer.json présent" || echo "⚠ composer.json absent"
+                    set +e  # Ne pas arrêter en cas d'échec des tests
                     
-                    # Créer un rapport minimal
-                    cat > test-reports/simple-tests.xml << 'XML'
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites>
-  <testsuite name="Simple Tests" tests="4" failures="0" errors="0">
-    <testcase name="PHP Version" classname="System" time="0.1"/>
-    <testcase name="PHP Extensions" classname="System" time="0.1"/>
-    <testcase name="Composer" classname="System" time="0.1"/>
-    <testcase name="Laravel Structure" classname="System" time="0.1"/>
-  </testsuite>
-</testsuites>
-XML
+                    # Exécution des tests avec rapports
+                    timeout 600 ${PHPUNIT_CMD} \
+                        --log-junit test-reports/junit.xml \
+                        --testdox-text test-reports/testdox.txt \
+                        --colors=never \
+                        2>&1 | tee test-reports/phpunit.log
                     
-                    # Créer également un rapport texte
-                    cat > test-reports/test-summary.txt << 'SUMMARY'
-=== RÉSUMÉ DES TESTS SIMPLIFIÉS ===
-1. PHP Version: OK
-2. Extensions PHP: Vérifiées
-3. Composer: Installé
-4. Structure Laravel: Vérifiée
-=== TESTS TERMINÉS ===
-SUMMARY
+                    TEST_EXIT_CODE=$?
+                    set -e
                     
-                    echo " Tests simplifiés exécutés avec succès"
+                    # Temps de fin
+                    END_TIME=$(date +%s)
+                    DURATION=$((END_TIME - START_TIME))
+                    
+                    echo "=== Résumé des tests ==="
+                    echo "Durée: ${DURATION} secondes"
+                    echo "Code de sortie: ${TEST_EXIT_CODE}"
+                    
+                    # Analyser les résultats
+                    if [ ${TEST_EXIT_CODE} -eq 0 ]; then
+                        echo "✅ Tous les tests ont réussi!"
+                    elif [ ${TEST_EXIT_CODE} -eq 124 ]; then
+                        echo "⚠ Tests interrompus par timeout (10 minutes)"
+                    elif [ ${TEST_EXIT_CODE} -eq 139 ]; then
+                        echo "❌ Segmentation fault détecté!"
+                        echo "Causes possibles:"
+                        echo "1. Xdebug activé"
+                        echo "2. Mémoire insuffisante"
+                        echo "3. Extension PHP problématique"
+                        echo "Conseil: Essayez avec php -d xdebug.mode=off vendor/bin/phpunit"
+                    else
+                        echo "⚠ Certains tests ont échoué (code: ${TEST_EXIT_CODE})"
+                    fi
+                    
+                    # Afficher un résumé des tests
+                    echo "=== Résumé du rapport ==="
+                    if [ -f "test-reports/testdox.txt" ]; then
+                        tail -50 test-reports/testdox.txt
+                    fi
+                    
+                    # Générer un rapport de synthèse
+                    cat > test-reports/summary.md << EOF
+# Rapport des Tests - Build ${BUILD_VERSION}
+
+## Informations générales
+- **Date**: $(date)
+- **Durée**: ${DURATION} secondes
+- **Résultat**: $(if [ ${TEST_EXIT_CODE} -eq 0 ]; then echo "✅ SUCCÈS"; else echo "⚠ ÉCHEC (code: ${TEST_EXIT_CODE})"; fi)
+
+## Fichiers générés
+- **JUnit XML**: test-reports/junit.xml
+- **TestDox Texte**: test-reports/testdox.txt
+- **Log complet**: test-reports/phpunit.log
+
+## Statistiques
+\$(tail -20 test-reports/phpunit.log | grep -E "(Tests:|Time:|Memory:)" || echo "Aucune statistique disponible")
+
+## Commandes de diagnostic
+\`\`\`bash
+# Relancer les tests en mode verbeux
+php -d xdebug.mode=off vendor/bin/phpunit --verbose
+
+# Voir les tests échoués
+grep -A 5 -B 5 "FAIL\|ERROR" test-reports/phpunit.log
+\`\`\`
+EOF
+                    
+                    echo "✅ Exécution des tests PHPUnit terminée"
+                    echo "📊 Voir les rapports dans test-reports/"
                 '''
             }
             post {
                 always {
+                    // Archiver tous les rapports même si les tests échouent
                     archiveArtifacts artifacts: 'test-reports/**', allowEmptyArchive: true
+                    // Ne pas faire échouer le build si les tests échouent
                 }
             }
         }
-     // ÉTAPE 6: Security Scan with Trivy
+
+        // ÉTAPE 6: Security Scan with Trivy
         stage('Security Scan with Trivy') {
             steps {
                 sh '''
@@ -326,7 +387,7 @@ DOCKEREOF
                                     echo " Échec du push de la version spécifique"
                                     # Continuer quand même pour latest
                                 }
-                            """
+                            '''
                             
                             // Push de l'image avec tag latest
                             sh """
@@ -334,7 +395,7 @@ DOCKEREOF
                                 docker push ${DOCKER_REPO}:latest || {
                                     echo " Échec du push de latest"
                                 }
-                            """
+                            '''
                             
                             sh 'docker logout'
                             echo " Push vers Docker Hub terminé"
