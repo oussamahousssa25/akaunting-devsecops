@@ -126,7 +126,7 @@ EOF
             }
         }
 
-        // ÉTAPE 5: VRAIS TESTS PHPUNIT (version corrigée)
+        // ÉTAPE 5: VRAIS TESTS PHPUNIT (version corrigée sans backslash)
         stage('Exécuter Tests PHPUnit Complets') {
             agent {
                 docker {
@@ -213,9 +213,9 @@ EOF
                         tail -50 test-reports/testdox.txt
                     fi
                     
-                    # Générer un rapport de synthèse simplifié (sans backticks)
-                    cat > test-reports/summary.md << SUMMARYEOF
-# Rapport des Tests - Build ${BUILD_VERSION}
+                    # Générer un rapport de synthèse simplifié (sans backslashes problématiques)
+                    cat > test-reports/summary.md << 'SUMMARY_EOF'
+# Rapport des Tests - Build
 
 ## Informations générales
 - **Date**: $(date)
@@ -232,8 +232,9 @@ $(tail -20 test-reports/phpunit.log | grep -E "(Tests:|Time:|Memory:)" || echo "
 
 ## Commandes de diagnostic
 - Relancer les tests en mode verbeux: php -d xdebug.mode=off vendor/bin/phpunit --verbose
-- Voir les tests échoués: grep -A 5 -B 5 "FAIL\|ERROR" test-reports/phpunit.log
-SUMMARYEOF
+- Voir les tests échoués: grep -A 5 -B 5 "FAIL" test-reports/phpunit.log
+- Voir les erreurs: grep -A 5 -B 5 "ERROR" test-reports/phpunit.log
+SUMMARY_EOF
                     
                     echo "Exécution des tests PHPUnit terminée"
                     echo "Voir les rapports dans test-reports/"
