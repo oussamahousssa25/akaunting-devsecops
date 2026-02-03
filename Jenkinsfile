@@ -12,12 +12,12 @@ pipeline {
         // ÉTAPE 1: Vérification de l'environnement
         stage('Vérifier Environnement') {
             steps {
-                echo "========== 🚀 DÉMARRAGE DU PIPELINE =========="
+                echo "========== DÉMARRAGE DU PIPELINE =========="
                 echo "Build Version: ${BUILD_VERSION}"
                 sh '''
                     echo "=== ENVIRONNEMENT DISPONIBLE ==="
                     docker --version || echo "Docker non disponible"
-                    echo "✅ Environnement vérifié"
+                    echo " Environnement vérifié"
                 '''
             }
         }
@@ -25,7 +25,7 @@ pipeline {
         // ÉTAPE 2: Récupération du code (CORRIGÉ)
         stage('Checkout du Code') {
             steps {
-                echo "========== 📂 RÉCUPÉRATION DU CODE =========="
+                echo "========== RÉCUPÉRATION DU CODE =========="
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: '*/main']],
@@ -61,7 +61,7 @@ pipeline {
             }
             steps {
                 sh '''
-                    echo "========== 📦 INSTALLATION DES DÉPENDANCES =========="
+                    echo "========== INSTALLATION DES DÉPENDANCES =========="
                     
                     # Corriger permissions Git dans le conteneur
                     git config --global --unset-all safe.directory 2>/dev/null || true
@@ -81,10 +81,10 @@ pipeline {
                         --ignore-platform-reqs
                     
                     if [ -d "vendor" ]; then
-                        echo "✅ Dépendances installées"
+                        echo " Dépendances installées"
                         composer dump-autoload --optimize --no-scripts
                     else
-                        echo "⚠ Dépendances non installées"
+                        echo " Dépendances non installées"
                     fi
                 '''
             }
@@ -100,7 +100,7 @@ pipeline {
             }
             steps {
                 sh '''
-                    echo "========== ⚙️ CONFIGURATION LARAVEL PHP 8.1 =========="
+                    echo "========== CONFIGURATION LARAVEL PHP 8.1 =========="
                     cat > .env << EOF
 APP_NAME="Akaunting"
 APP_ENV=testing
@@ -121,7 +121,7 @@ EOF
                     
                     touch database/database.sqlite
                     chmod 666 database/database.sqlite
-                    echo "✅ Configuration Laravel terminée"
+                    echo " Configuration Laravel terminée"
                 '''
             }
         }
@@ -135,7 +135,7 @@ EOF
             }
             steps {
                 sh '''
-                    echo "========== 🧪 TESTS SIMPLIFIÉS =========="
+                    echo "========== TESTS SIMPLIFIÉS =========="
                     mkdir -p test-reports
                     
                     # Installation de Composer (correction de l'erreur)
@@ -157,9 +157,9 @@ EOF
                     
                     echo "=== Test 4: Structure Laravel ==="
                     ls -la
-                    [ -f "artisan" ] && echo "✅ Artisan présent" || echo "⚠ Artisan absent"
-                    [ -d "vendor" ] && echo "✅ Vendor présent" || echo "⚠ Vendor absent"
-                    [ -f "composer.json" ] && echo "✅ composer.json présent" || echo "⚠ composer.json absent"
+                    [ -f "artisan" ] && echo " Artisan présent" || echo "⚠ Artisan absent"
+                    [ -d "vendor" ] && echo " Vendor présent" || echo "⚠ Vendor absent"
+                    [ -f "composer.json" ] && echo " composer.json présent" || echo "⚠ composer.json absent"
                     
                     # Créer un rapport minimal
                     cat > test-reports/simple-tests.xml << 'XML'
@@ -184,7 +184,7 @@ XML
 === TESTS TERMINÉS ===
 SUMMARY
                     
-                    echo "✅ Tests simplifiés exécutés avec succès"
+                    echo " Tests simplifiés exécutés avec succès"
                 '''
             }
             post {
@@ -197,7 +197,7 @@ SUMMARY
         stage('Security Scan with Trivy') {
             steps {
                 sh '''
-                    echo "========== 🔍 SCAN DE SÉCURITÉ TRIVY =========="
+                    echo "========== SCAN DE SÉCURITÉ TRIVY =========="
                     mkdir -p trivy-reports
                     docker run --rm \
                         -v $(pwd):/src \
@@ -206,7 +206,7 @@ SUMMARY
                         --no-progress \
                         --format json \
                         /src > trivy-reports/dependency-scan.json 2>/dev/null || echo "Scan Trivy échoué"
-                    echo "✅ Scan Trivy terminé"
+                    echo " Scan Trivy terminé"
                 '''
             }
             post {
@@ -220,7 +220,7 @@ SUMMARY
         stage('Build Docker Image PHP 8.1') {
             steps {
                 script {
-                    echo "========== 🐳 CONSTRUCTION IMAGE DOCKER PHP 8.1 =========="
+                    echo "========== CONSTRUCTION IMAGE DOCKER PHP 8.1 =========="
                     
                     sh '''
                         # Vérifier le répertoire
@@ -268,9 +268,9 @@ RUN echo 'memory_limit = 512M' > /usr/local/etc/php/conf.d/memory.ini
 EXPOSE 80
 CMD ["apache2-foreground"]
 DOCKEREOF
-                            echo "✅ Dockerfile créé"
+                            echo " Dockerfile créé"
                         else
-                            echo "✅ Dockerfile existant trouvé"
+                            echo " Dockerfile existant trouvé"
                             cat Dockerfile
                         fi
                     '''
@@ -283,7 +283,7 @@ DOCKEREOF
                         # Tester l'image
                         echo "Test de l'image..."
                         docker run --rm ${DOCKER_REPO}:${IMAGE_TAG} php --version
-                        echo "✅ Image Docker construite"
+                        echo " Image Docker construite"
                         
                         # Lister les images
                         echo "Images disponibles:"
@@ -297,7 +297,7 @@ DOCKEREOF
         stage('Push to Docker Hub') {
             steps {
                 script {
-                    echo "========== 📤 PUSH VERS DOCKER HUB =========="
+                    echo "========== PUSH VERS DOCKER HUB =========="
                     
                     // Vérifier d'abord si l'image existe localement
                     sh """
@@ -314,7 +314,7 @@ DOCKEREOF
                             sh '''
                                 echo "Connexion à Docker Hub..."
                                 echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin || {
-                                    echo "❌ Échec de la connexion à Docker Hub"
+                                    echo " Échec de la connexion à Docker Hub"
                                     exit 1
                                 }
                             '''
@@ -323,7 +323,7 @@ DOCKEREOF
                             sh """
                                 echo "Pushing ${DOCKER_REPO}:${IMAGE_TAG}..."
                                 docker push ${DOCKER_REPO}:${IMAGE_TAG} || {
-                                    echo "⚠ Échec du push de la version spécifique"
+                                    echo " Échec du push de la version spécifique"
                                     # Continuer quand même pour latest
                                 }
                             """
@@ -332,15 +332,15 @@ DOCKEREOF
                             sh """
                                 echo "Pushing ${DOCKER_REPO}:latest..."
                                 docker push ${DOCKER_REPO}:latest || {
-                                    echo "⚠ Échec du push de latest"
+                                    echo " Échec du push de latest"
                                 }
                             """
                             
                             sh 'docker logout'
-                            echo "✅ Push vers Docker Hub terminé"
+                            echo " Push vers Docker Hub terminé"
                         }
                     } catch (Exception e) {
-                        echo "⚠ Push vers Docker Hub échoué: ${e.getMessage()}"
+                        echo " Push vers Docker Hub échoué: ${e.getMessage()}"
                         echo "Cette étape peut être ignorée pour le moment"
                         // Ne pas faire échouer le build à cause du push
                     }
@@ -353,7 +353,7 @@ DOCKEREOF
     post {
         success {
             echo """
-            ========== ✅ PIPELINE RÉUSSI ==========
+            ========== PIPELINE RÉUSSI ==========
             Build: ${BUILD_VERSION}
             Image: ${DOCKER_REPO}:${IMAGE_TAG}
             =========================================
@@ -372,7 +372,7 @@ DOCKEREOF
         
         failure {
             echo """
-            ========== ❌ PIPELINE EN ÉCHEC ==========
+            ========== PIPELINE EN ÉCHEC ==========
             Build: ${BUILD_VERSION}
             ==========================================
             """
@@ -380,7 +380,7 @@ DOCKEREOF
         
         always {
             echo """
-            ========== 📊 RÉSUMÉ ==========
+            ========== RÉSUMÉ ==========
             Durée: ${currentBuild.durationString}
             Résultat: ${currentBuild.currentResult}
             =================================
