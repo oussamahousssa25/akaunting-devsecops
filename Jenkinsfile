@@ -126,7 +126,7 @@ EOF
             }
         }
 
-        // ÉTAPE 5: VRAIS TESTS PHPUNIT (remplacé)
+        // ÉTAPE 5: VRAIS TESTS PHPUNIT (version corrigée)
         stage('Exécuter Tests PHPUnit Complets') {
             agent {
                 docker {
@@ -194,18 +194,17 @@ EOF
                     
                     # Analyser les résultats
                     if [ ${TEST_EXIT_CODE} -eq 0 ]; then
-                        echo "✅ Tous les tests ont réussi!"
+                        echo "Tous les tests ont réussi!"
                     elif [ ${TEST_EXIT_CODE} -eq 124 ]; then
-                        echo "⚠ Tests interrompus par timeout (10 minutes)"
+                        echo "Tests interrompus par timeout (10 minutes)"
                     elif [ ${TEST_EXIT_CODE} -eq 139 ]; then
-                        echo "❌ Segmentation fault détecté!"
+                        echo "Segmentation fault détecté!"
                         echo "Causes possibles:"
                         echo "1. Xdebug activé"
                         echo "2. Mémoire insuffisante"
                         echo "3. Extension PHP problématique"
-                        echo "Conseil: Essayez avec php -d xdebug.mode=off vendor/bin/phpunit"
                     else
-                        echo "⚠ Certains tests ont échoué (code: ${TEST_EXIT_CODE})"
+                        echo "Certains tests ont échoué (code: ${TEST_EXIT_CODE})"
                     fi
                     
                     # Afficher un résumé des tests
@@ -214,14 +213,14 @@ EOF
                         tail -50 test-reports/testdox.txt
                     fi
                     
-                    # Générer un rapport de synthèse
-                    cat > test-reports/summary.md << EOF
+                    # Générer un rapport de synthèse simplifié (sans backticks)
+                    cat > test-reports/summary.md << SUMMARYEOF
 # Rapport des Tests - Build ${BUILD_VERSION}
 
 ## Informations générales
 - **Date**: $(date)
 - **Durée**: ${DURATION} secondes
-- **Résultat**: $(if [ ${TEST_EXIT_CODE} -eq 0 ]; then echo "✅ SUCCÈS"; else echo "⚠ ÉCHEC (code: ${TEST_EXIT_CODE})"; fi)
+- **Résultat**: $(if [ ${TEST_EXIT_CODE} -eq 0 ]; then echo "SUCCÈS"; else echo "ÉCHEC (code: ${TEST_EXIT_CODE})"; fi)
 
 ## Fichiers générés
 - **JUnit XML**: test-reports/junit.xml
@@ -229,27 +228,20 @@ EOF
 - **Log complet**: test-reports/phpunit.log
 
 ## Statistiques
-\$(tail -20 test-reports/phpunit.log | grep -E "(Tests:|Time:|Memory:)" || echo "Aucune statistique disponible")
+$(tail -20 test-reports/phpunit.log | grep -E "(Tests:|Time:|Memory:)" || echo "Aucune statistique disponible")
 
 ## Commandes de diagnostic
-\`\`\`bash
-# Relancer les tests en mode verbeux
-php -d xdebug.mode=off vendor/bin/phpunit --verbose
-
-# Voir les tests échoués
-grep -A 5 -B 5 "FAIL\|ERROR" test-reports/phpunit.log
-\`\`\`
-EOF
+- Relancer les tests en mode verbeux: php -d xdebug.mode=off vendor/bin/phpunit --verbose
+- Voir les tests échoués: grep -A 5 -B 5 "FAIL\|ERROR" test-reports/phpunit.log
+SUMMARYEOF
                     
-                    echo "✅ Exécution des tests PHPUnit terminée"
-                    echo "📊 Voir les rapports dans test-reports/"
+                    echo "Exécution des tests PHPUnit terminée"
+                    echo "Voir les rapports dans test-reports/"
                 '''
             }
             post {
                 always {
-                    // Archiver tous les rapports même si les tests échouent
                     archiveArtifacts artifacts: 'test-reports/**', allowEmptyArchive: true
-                    // Ne pas faire échouer le build si les tests échouent
                 }
             }
         }
@@ -387,7 +379,7 @@ DOCKEREOF
                                     echo " Échec du push de la version spécifique"
                                     # Continuer quand même pour latest
                                 }
-                            '''
+                            """
                             
                             // Push de l'image avec tag latest
                             sh """
@@ -395,7 +387,7 @@ DOCKEREOF
                                 docker push ${DOCKER_REPO}:latest || {
                                     echo " Échec du push de latest"
                                 }
-                            '''
+                            """
                             
                             sh 'docker logout'
                             echo " Push vers Docker Hub terminé"
@@ -403,7 +395,6 @@ DOCKEREOF
                     } catch (Exception e) {
                         echo " Push vers Docker Hub échoué: ${e.getMessage()}"
                         echo "Cette étape peut être ignorée pour le moment"
-                        // Ne pas faire échouer le build à cause du push
                     }
                 }
             }
@@ -419,7 +410,6 @@ DOCKEREOF
             Image: ${DOCKER_REPO}:${IMAGE_TAG}
             =========================================
             """
-            // Générer un rapport
             sh """
                 echo "=== RAPPORT DE BUILD ===" > build-report.txt
                 echo "Date: \$(date)" >> build-report.txt
